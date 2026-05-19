@@ -205,7 +205,7 @@ fn lock_state() -> MutexGuard<'static, Option<AppState>> {
 fn settings_path() -> PathBuf {
     let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
     PathBuf::from(appdata)
-        .join("ClaudeCodeUsageMonitor")
+        .join("AIUsageMonitor")
         .join("settings.json")
 }
 
@@ -764,7 +764,7 @@ fn begin_winget_update(hwnd: HWND) {
 }
 
 const STARTUP_REGISTRY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-const STARTUP_REGISTRY_KEY: &str = "ClaudeCodeUsageMonitor";
+const STARTUP_REGISTRY_KEY: &str = "AIUsageMonitor";
 
 /// Returns true only if the startup registry value points to this executable.
 fn is_startup_enabled() -> bool {
@@ -973,7 +973,7 @@ pub fn run() {
     diagnose::log("window::run started");
 
     // Single-instance guard: silently exit if another instance is running
-    let mutex_name = native_interop::wide_str("Global\\ClaudeCodeUsageMonitor");
+    let mutex_name = native_interop::wide_str("Global\\AIUsageMonitor");
     let _mutex = unsafe {
         let handle = CreateMutexW(None, false, PCWSTR::from_raw(mutex_name.as_ptr()));
         match handle {
@@ -994,7 +994,7 @@ pub fn run() {
         }
     };
 
-    let class_name = native_interop::wide_str("ClaudeCodeUsageMonitor");
+    let class_name = native_interop::wide_str("AIUsageMonitor");
 
     unsafe {
         let hinstance = GetModuleHandleW(PCWSTR::null()).unwrap();
