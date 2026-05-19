@@ -5,18 +5,29 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Release version tag (e.g., v1.5.0)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_ASSET_NAME: claude-code-usage-monitor.exe
 
 jobs:
-  build_and_test:
-    name: Build and Test (Windows)
+  build_and_release:
+    name: Build, Test and Release (Windows)
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -24,8 +35,15 @@ jobs:
       - name: Configure Cargo Cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Cargo Build
-        run: cargo build --verbose
+      - name: Cargo Build (Release)
+        run: cargo build --release --verbose
 
       - name: Cargo Test
         run: cargo test --verbose
+
+      - name: Create GitHub Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version_tag || github.ref_name }}
+          files: target/release/claude-code-usage-monitor.exe
+          generate_release_notes: true
