@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
@@ -1252,7 +1253,14 @@ fn gemini_extract_oauth_client(home: &std::path::Path) -> Result<(String, String
         }
     }
 
-    // 2. Try npm global path on Windows
+    // 2. Resolve via where.exe gemini
+    if let Some(path) = resolve_gemini_oauth_via_where() {
+        if let Some(creds) = extract_oauth_from_js(&path) {
+            return Ok(creds);
+        }
+    }
+
+    // 3. Try npm global path on Windows
     if let Some(appdata) = dirs::data_dir() {
         let oauth_js = appdata
             .join("npm").join("node_modules").join("@google")
@@ -1285,6 +1293,40 @@ fn gemini_extract_oauth_client(home: &std::path::Path) -> Result<(String, String
     let id = std::env::var("GEMINI_CLIENT_ID").map_err(|_| PollError::NoCredentials)?;
     let secret = std::env::var("GEMINI_CLIENT_SECRET").map_err(|_| PollError::NoCredentials)?;
     Ok((id, secret))
+}
+
+fn resolve_gemini_oauth_via_where() -> Option<PathBuf> {
+    let output = Command::new("where.exe")
+        .arg("gemini")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let path = line.trim();
+        if path.is_empty() { continue; }
+        
+        let path_buf = PathBuf::from(path);
+        if let Some(parent) = path_buf.parent() {
+            let candidate = parent
+                .join("node_modules")
+                .join("@google")
+                .join("gemini-cli-core")
+                .join("dist")
+                .join("src")
+                .join("code_assist")
+                .join("oauth2.js");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn extract_oauth_from_js(path: &std::path::Path) -> Option<(String, String)> {
@@ -1389,12 +1431,31 @@ struct AntigravityQuotaInfo {
     reset_time: Option<String>,
 }
 
+static ANTIGRAVITY_CACHE: Mutex<Option<(AntigravityProcessInfo, u16)>> = Mutex::new(None);
+
 fn poll_antigravity() -> Result<UsageData, PollError> {
-    // Detect language_server_windows process
+    if let Ok(mut cache) = ANTIGRAVITY_CACHE.lock() {
+        if let Some((info, port)) = cache.as_ref() {
+            if let Ok(data) = fetch_antigravity_usage(*port, info) {
+                return Ok(data);
+            }
+            *cache = None;
+        }
+    }
+
     let process_info = antigravity_detect_process()?;
     let api_port = antigravity_find_api_port(process_info.extension_port)?;
+    
+    let data = fetch_antigravity_usage(api_port, &process_info)?;
+    
+    if let Ok(mut cache) = ANTIGRAVITY_CACHE.lock() {
+        *cache = Some((process_info, api_port));
+    }
+    
+    Ok(data)
+}
 
-    // Build TLS connector that accepts self-signed certs (local server only)
+fn fetch_antigravity_usage(api_port: u16, process_info: &AntigravityProcessInfo) -> Result<UsageData, PollError> {
     let tls = native_tls::TlsConnector::builder()
         .danger_accept_invalid_certs(true)
         .build()
@@ -1431,7 +1492,6 @@ fn poll_antigravity() -> Result<UsageData, PollError> {
     {
         Ok(resp) => resp,
         Err(ureq::Error::Status(401, _)) => {
-            // Retry with main CSRF token
             if process_info.ext_csrf_token.is_some() {
                 match agent
                     .post(&url)
@@ -1455,6 +1515,7 @@ fn poll_antigravity() -> Result<UsageData, PollError> {
     antigravity_usage_from_response(status_resp)
 }
 
+#[derive(Clone)]
 struct AntigravityProcessInfo {
     csrf_token: String,
     ext_csrf_token: Option<String>,
@@ -1517,7 +1578,7 @@ fn antigravity_find_api_port(extension_port: u16) -> Result<u16, PollError> {
         .map_err(|_| PollError::RequestFailed)?;
 
     let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(2))
+        .timeout(Duration::from_millis(200))
         .tls_connector(std::sync::Arc::new(tls))
         .build();
 

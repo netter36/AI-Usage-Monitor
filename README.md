@@ -94,16 +94,6 @@ claude-code-usage-monitor --diagnose
 %APPDATA%\ClaudeCodeUsageMonitor\settings.json
 ```
 
-## 계정 지원 (Account Support)
-
-이 앱은 각 CLI가 지원하는 것과 동일한 계정 유형을 지원합니다.
-
-**2026년 3월 19일** 기준, Anthropic의 Claude Code 설정 문서에 따르면:
-
-- **지원됨:** Pro, Max, Teams, Enterprise, Console 계정
-- **지원되지 않음:** 무료 Claude.ai 플랜
-
-만약 Anthropic이 향후 Claude Code의 가용성을 변경하더라도, 동일한 인증 엔드포인트를 통해 사용량 데이터가 계속 노출되는 한 이 앱은 Claude Code가 지원하는 모든 사항을 동일하게 따릅니다.
 
 ## 프라이버시 및 보안 (Privacy And Security)
 
