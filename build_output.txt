@@ -1,0 +1,30 @@
+﻿cargo :    Compiling claude-code-usage-monitor v1.4.1 (C:\Users\Admin\Desktop\Git\AI-Usage-Monitor)
+위치 줄:1 문자:54
++ ... H = "$env:USERPROFILE\.cargo\bin;$env:PATH"; cargo check 2>&1 | Out-F ...
++                                                  ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling cl...-Usage-Monitor):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: fields `gemini_token_expired_title`, `gemini_token_expired_body`, `antigravity_not_running_title`, and `antigr
+avity_not_running_body` are never read
+   --> src\localization\mod.rs:167:9
+    |
+123 | pub struct Strings {
+    |            ------- fields in this struct
+...
+167 |     pub gemini_token_expired_title: &'static str,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+168 |     pub gemini_token_expired_body: &'static str,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+169 |     pub antigravity_window_title: &'static str,
+170 |     pub antigravity_not_running_title: &'static str,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+171 |     pub antigravity_not_running_body: &'static str,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `Strings` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during 
+dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `claude-code-usage-monitor` (bin "claude-code-usage-monitor") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.47s

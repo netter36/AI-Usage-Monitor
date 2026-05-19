@@ -12,6 +12,8 @@ use crate::native_interop::{self, Color, WM_APP_TRAY};
 
 const CLAUDE_TRAY_ICON_ID: u32 = 1;
 const CODEX_TRAY_ICON_ID: u32 = 2;
+const GEMINI_TRAY_ICON_ID: u32 = 3;
+const ANTIGRAVITY_TRAY_ICON_ID: u32 = 4;
 
 /// Menu item ID for toggling widget visibility (used by window.rs context menu).
 pub const IDM_TOGGLE_WIDGET: u16 = 50;
@@ -27,6 +29,8 @@ pub enum TrayAction {
 pub enum TrayIconKind {
     Claude,
     Codex,
+    Gemini,
+    Antigravity,
 }
 
 pub struct TrayIconData {
@@ -40,6 +44,8 @@ impl TrayIconKind {
         match self {
             Self::Claude => CLAUDE_TRAY_ICON_ID,
             Self::Codex => CODEX_TRAY_ICON_ID,
+            Self::Gemini => GEMINI_TRAY_ICON_ID,
+            Self::Antigravity => ANTIGRAVITY_TRAY_ICON_ID,
         }
     }
 }
@@ -104,25 +110,30 @@ pub fn create_icon(kind: TrayIconKind, percent: Option<f64>) -> HICON {
     let size = 64_i32;
     let margin = 0_i32;
     let radius = 2_i32;
-    let outline = if matches!(kind, TrayIconKind::Codex) {
-        3_i32
-    } else {
-        0_i32
+    let outline = match kind {
+        TrayIconKind::Codex => 3_i32,
+        TrayIconKind::Gemini | TrayIconKind::Antigravity => 2_i32,
+        _ => 0_i32,
     };
 
     let fill = match kind {
         TrayIconKind::Claude => interpolated_fill(percent.unwrap_or(0.0)),
         TrayIconKind::Codex => codex_fill(percent.unwrap_or(0.0)),
+        TrayIconKind::Gemini => Color::from_hex("#4285F4"),
+        TrayIconKind::Antigravity => Color::from_hex("#A855F7"),
     };
     let text_col = match kind {
         TrayIconKind::Claude => Color::from_hex("#FFFFFF"),
         TrayIconKind::Codex if percent.unwrap_or(0.0) >= 90.0 => Color::from_hex("#111111"),
         TrayIconKind::Codex => Color::from_hex("#FFFFFF"),
+        TrayIconKind::Gemini | TrayIconKind::Antigravity => Color::from_hex("#FFFFFF"),
     };
     let outline_col = match kind {
         TrayIconKind::Claude => fill,
         TrayIconKind::Codex if percent.unwrap_or(0.0) >= 90.0 => Color::from_hex("#111111"),
         TrayIconKind::Codex => Color::from_hex("#FFFFFF"),
+        TrayIconKind::Gemini => Color::from_hex("#3367D6"),
+        TrayIconKind::Antigravity => Color::from_hex("#7C3AED"),
     };
 
     let display_text = match percent {
@@ -130,6 +141,8 @@ pub fn create_icon(kind: TrayIconKind, percent: Option<f64>) -> HICON {
         None => match kind {
             TrayIconKind::Claude => String::new(),
             TrayIconKind::Codex => "C".to_string(),
+            TrayIconKind::Gemini => "G".to_string(),
+            TrayIconKind::Antigravity => "A".to_string(),
         },
     };
 
@@ -391,31 +404,29 @@ pub fn remove(hwnd: HWND, kind: TrayIconKind) {
 }
 
 pub fn sync(hwnd: HWND, icons: &[TrayIconData]) {
-    let show_claude = icons
-        .iter()
-        .find(|icon| matches!(icon.kind, TrayIconKind::Claude));
-    let show_codex = icons
-        .iter()
-        .find(|icon| matches!(icon.kind, TrayIconKind::Codex));
+    let all_kinds = [
+        TrayIconKind::Claude,
+        TrayIconKind::Codex,
+        TrayIconKind::Gemini,
+        TrayIconKind::Antigravity,
+    ];
 
-    if let Some(icon) = show_claude {
-        add(hwnd, icon.kind, icon.percent, &icon.tooltip);
-        update(hwnd, icon.kind, icon.percent, &icon.tooltip);
-    } else {
-        remove(hwnd, TrayIconKind::Claude);
-    }
-
-    if let Some(icon) = show_codex {
-        add(hwnd, icon.kind, icon.percent, &icon.tooltip);
-        update(hwnd, icon.kind, icon.percent, &icon.tooltip);
-    } else {
-        remove(hwnd, TrayIconKind::Codex);
+    for kind in all_kinds {
+        let found = icons.iter().find(|icon| icon.kind.id() == kind.id());
+        if let Some(icon) = found {
+            add(hwnd, icon.kind, icon.percent, &icon.tooltip);
+            update(hwnd, icon.kind, icon.percent, &icon.tooltip);
+        } else {
+            remove(hwnd, kind);
+        }
     }
 }
 
 pub fn remove_all(hwnd: HWND) {
     remove(hwnd, TrayIconKind::Claude);
     remove(hwnd, TrayIconKind::Codex);
+    remove(hwnd, TrayIconKind::Gemini);
+    remove(hwnd, TrayIconKind::Antigravity);
 }
 
 /// Interpret a tray callback message and return the action to take.

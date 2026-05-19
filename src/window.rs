@@ -63,8 +63,18 @@ struct AppState {
     codex_session_text: String,
     codex_weekly_percent: f64,
     codex_weekly_text: String,
+    gemini_session_percent: f64,
+    gemini_session_text: String,
+    gemini_weekly_percent: f64,
+    gemini_weekly_text: String,
+    antigravity_session_percent: f64,
+    antigravity_session_text: String,
+    antigravity_weekly_percent: f64,
+    antigravity_weekly_text: String,
     show_claude_code: bool,
     show_codex: bool,
+    show_gemini: bool,
+    show_antigravity: bool,
 
     data: Option<AppUsageData>,
 
@@ -121,6 +131,8 @@ const IDM_LANG_KOREAN: u16 = 47;
 const IDM_LANG_TRADITIONAL_CHINESE: u16 = 48;
 const IDM_MODEL_CLAUDE_CODE: u16 = 60;
 const IDM_MODEL_CODEX: u16 = 61;
+const IDM_MODEL_GEMINI: u16 = 62;
+const IDM_MODEL_ANTIGRAVITY: u16 = 63;
 
 const DIVIDER_HIT_ZONE: i32 = 13; // LEFT_DIVIDER_W + DIVIDER_RIGHT_MARGIN
 
@@ -213,6 +225,10 @@ struct SettingsFile {
     show_claude_code: bool,
     #[serde(default = "default_show_codex")]
     show_codex: bool,
+    #[serde(default)]
+    show_gemini: bool,
+    #[serde(default)]
+    show_antigravity: bool,
 }
 
 impl Default for SettingsFile {
@@ -225,6 +241,8 @@ impl Default for SettingsFile {
             widget_visible: true,
             show_claude_code: true,
             show_codex: false,
+            show_gemini: false,
+            show_antigravity: false,
         }
     }
 }
@@ -251,7 +269,7 @@ fn load_settings() -> SettingsFile {
         Err(_) => return SettingsFile::default(),
     };
     let mut settings: SettingsFile = serde_json::from_str(&content).unwrap_or_default();
-    if !settings.show_claude_code && !settings.show_codex {
+    if !settings.show_claude_code && !settings.show_codex && !settings.show_gemini && !settings.show_antigravity {
         settings.show_claude_code = true;
     }
     settings
@@ -280,6 +298,8 @@ fn save_state_settings() {
             widget_visible: s.widget_visible,
             show_claude_code: s.show_claude_code,
             show_codex: s.show_codex,
+            show_gemini: s.show_gemini,
+            show_antigravity: s.show_antigravity,
         });
     }
 }
@@ -313,6 +333,30 @@ fn tray_icon_data_from_state() -> Vec<tray_icon::TrayIconData> {
                     ),
                 });
             }
+            if s.show_gemini {
+                icons.push(tray_icon::TrayIconData {
+                    kind: tray_icon::TrayIconKind::Gemini,
+                    percent: Some(s.gemini_session_percent),
+                    tooltip: format!(
+                        "{} Pro: {} | Flash: {}",
+                        s.language.strings().gemini_model,
+                        s.gemini_session_text,
+                        s.gemini_weekly_text
+                    ),
+                });
+            }
+            if s.show_antigravity {
+                icons.push(tray_icon::TrayIconData {
+                    kind: tray_icon::TrayIconKind::Antigravity,
+                    percent: Some(s.antigravity_session_percent),
+                    tooltip: format!(
+                        "{} Claude: {} | Pro: {}",
+                        s.language.strings().antigravity_model,
+                        s.antigravity_session_text,
+                        s.antigravity_weekly_text
+                    ),
+                });
+            }
             icons
         }
         Some(s) => {
@@ -329,6 +373,20 @@ fn tray_icon_data_from_state() -> Vec<tray_icon::TrayIconData> {
                     kind: tray_icon::TrayIconKind::Codex,
                     percent: None,
                     tooltip: s.language.strings().codex_window_title.to_string(),
+                });
+            }
+            if s.show_gemini {
+                icons.push(tray_icon::TrayIconData {
+                    kind: tray_icon::TrayIconKind::Gemini,
+                    percent: None,
+                    tooltip: s.language.strings().gemini_window_title.to_string(),
+                });
+            }
+            if s.show_antigravity {
+                icons.push(tray_icon::TrayIconData {
+                    kind: tray_icon::TrayIconKind::Antigravity,
+                    percent: None,
+                    tooltip: s.language.strings().antigravity_window_title.to_string(),
                 });
             }
             icons
@@ -431,6 +489,22 @@ fn refresh_usage_texts(state: &mut AppState) {
     } else if state.show_codex {
         state.codex_session_text = "!".to_string();
         state.codex_weekly_text = "!".to_string();
+    }
+
+    if let Some(gemini) = data.gemini.as_ref() {
+        state.gemini_session_text = poller::format_line(&gemini.session, strings);
+        state.gemini_weekly_text = poller::format_line(&gemini.weekly, strings);
+    } else if state.show_gemini {
+        state.gemini_session_text = "!".to_string();
+        state.gemini_weekly_text = "!".to_string();
+    }
+
+    if let Some(antigravity) = data.antigravity.as_ref() {
+        state.antigravity_session_text = poller::format_line(&antigravity.session, strings);
+        state.antigravity_weekly_text = poller::format_line(&antigravity.weekly, strings);
+    } else if state.show_antigravity {
+        state.antigravity_session_text = "!".to_string();
+        state.antigravity_weekly_text = "!".to_string();
     }
 }
 
@@ -820,8 +894,8 @@ const MODEL_RIGHT_MARGIN: i32 = 5;
 const RIGHT_MARGIN: i32 = 1;
 const WIDGET_HEIGHT: i32 = 46;
 
-fn active_model_count(show_claude_code: bool, show_codex: bool) -> i32 {
-    (show_claude_code as i32 + show_codex as i32).max(1)
+fn active_model_count(show_claude_code: bool, show_codex: bool, show_gemini: bool, show_antigravity: bool) -> i32 {
+    (show_claude_code as i32 + show_codex as i32 + show_gemini as i32 + show_antigravity as i32).max(1)
 }
 
 fn row_bar_segment_count(active_models: i32) -> i32 {
@@ -848,7 +922,7 @@ fn total_widget_width_for(active_models: i32) -> i32 {
 }
 
 fn total_widget_width_for_state(state: &AppState) -> i32 {
-    total_widget_width_for(active_model_count(state.show_claude_code, state.show_codex))
+    total_widget_width_for(active_model_count(state.show_claude_code, state.show_codex, state.show_gemini, state.show_antigravity))
 }
 
 fn total_widget_width() -> i32 {
@@ -856,7 +930,7 @@ fn total_widget_width() -> i32 {
         let state = lock_state();
         state
             .as_ref()
-            .map(|s| active_model_count(s.show_claude_code, s.show_codex))
+            .map(|s| active_model_count(s.show_claude_code, s.show_codex, s.show_gemini, s.show_antigravity))
             .unwrap_or(1)
     };
     total_widget_width_for(active_models)
@@ -952,7 +1026,7 @@ pub fn run() {
         // Create as layered popup (will be reparented into taskbar)
         let title = native_interop::wide_str(language.strings().window_title);
         let initial_model_count =
-            active_model_count(settings.show_claude_code, settings.show_codex);
+            active_model_count(settings.show_claude_code, settings.show_codex, settings.show_gemini, settings.show_antigravity);
         let hwnd = CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE,
             PCWSTR::from_raw(class_name.as_ptr()),
@@ -1011,8 +1085,18 @@ pub fn run() {
                 codex_session_text: "--".to_string(),
                 codex_weekly_percent: 0.0,
                 codex_weekly_text: "--".to_string(),
+                gemini_session_percent: 0.0,
+                gemini_session_text: "--".to_string(),
+                gemini_weekly_percent: 0.0,
+                gemini_weekly_text: "--".to_string(),
+                antigravity_session_percent: 0.0,
+                antigravity_session_text: "--".to_string(),
+                antigravity_weekly_percent: 0.0,
+                antigravity_weekly_text: "--".to_string(),
                 show_claude_code: settings.show_claude_code,
                 show_codex: settings.show_codex,
+                show_gemini: settings.show_gemini,
+                show_antigravity: settings.show_antigravity,
                 data: None,
                 poll_interval_ms: settings.poll_interval_ms,
                 retry_count: 0,
@@ -1138,38 +1222,26 @@ pub fn run() {
 fn render_layered() {
     refresh_dpi();
     let (
-        hwnd_val,
-        is_dark,
-        embedded,
-        strings,
-        session_pct,
-        session_text,
-        weekly_pct,
-        weekly_text,
-        codex_session_pct,
-        codex_session_text,
-        codex_weekly_pct,
-        codex_weekly_text,
-        show_claude_code,
-        show_codex,
+        hwnd_val, is_dark, embedded, strings,
+        session_pct, session_text, weekly_pct, weekly_text,
+        codex_session_pct, codex_session_text, codex_weekly_pct, codex_weekly_text,
+        gemini_session_pct, gemini_session_text, gemini_weekly_pct, gemini_weekly_text,
+        antigravity_session_pct, antigravity_session_text, antigravity_weekly_pct, antigravity_weekly_text,
+        show_claude_code, show_codex, show_gemini, show_antigravity,
     ) = {
         let state = lock_state();
         match state.as_ref() {
             Some(s) => (
-                s.hwnd,
-                s.is_dark,
-                s.embedded,
-                s.language.strings(),
-                s.session_percent,
-                s.session_text.clone(),
-                s.weekly_percent,
-                s.weekly_text.clone(),
-                s.codex_session_percent,
-                s.codex_session_text.clone(),
-                s.codex_weekly_percent,
-                s.codex_weekly_text.clone(),
-                s.show_claude_code,
-                s.show_codex,
+                s.hwnd, s.is_dark, s.embedded, s.language.strings(),
+                s.session_percent, s.session_text.clone(),
+                s.weekly_percent, s.weekly_text.clone(),
+                s.codex_session_percent, s.codex_session_text.clone(),
+                s.codex_weekly_percent, s.codex_weekly_text.clone(),
+                s.gemini_session_percent, s.gemini_session_text.clone(),
+                s.gemini_weekly_percent, s.gemini_weekly_text.clone(),
+                s.antigravity_session_percent, s.antigravity_session_text.clone(),
+                s.antigravity_weekly_percent, s.antigravity_weekly_text.clone(),
+                s.show_claude_code, s.show_codex, s.show_gemini, s.show_antigravity,
             ),
             None => return,
         }
@@ -1190,6 +1262,8 @@ fn render_layered() {
 
     let accent = claude_accent_color();
     let codex_accent = codex_accent_color(is_dark);
+    let gemini_accent = Color::from_hex("#4285F4");
+    let antigravity_accent = Color::from_hex("#A855F7");
     let track = if is_dark {
         Color::from_hex("#444444")
     } else {
@@ -1240,26 +1314,14 @@ fn render_layered() {
         // Using an opaque background lets us use CLEARTYPE_QUALITY for
         // sub-pixel font rendering that matches the rest of the OS.
         paint_content(
-            mem_dc,
-            width,
-            height,
-            is_dark,
-            &bg_color,
-            &text_color,
-            &accent,
-            &track,
-            strings,
-            session_pct,
-            &session_text,
-            weekly_pct,
-            &weekly_text,
-            codex_session_pct,
-            &codex_session_text,
-            codex_weekly_pct,
-            &codex_weekly_text,
-            show_claude_code,
-            show_codex,
-            &codex_accent,
+            mem_dc, width, height, is_dark,
+            &bg_color, &text_color, &accent, &track, strings,
+            session_pct, &session_text, weekly_pct, &weekly_text,
+            codex_session_pct, &codex_session_text, codex_weekly_pct, &codex_weekly_text,
+            gemini_session_pct, &gemini_session_text, gemini_weekly_pct, &gemini_weekly_text,
+            antigravity_session_pct, &antigravity_session_text, antigravity_weekly_pct, &antigravity_weekly_text,
+            show_claude_code, show_codex, show_gemini, show_antigravity,
+            &codex_accent, &gemini_accent, &antigravity_accent,
         );
 
         // Background pixels → alpha 1 (nearly invisible but still hittable for right-click).
@@ -1310,26 +1372,14 @@ fn render_layered() {
 
 /// Paint all widget content onto a DC with a given background color.
 fn paint_content(
-    hdc: HDC,
-    width: i32,
-    height: i32,
-    is_dark: bool,
-    bg: &Color,
-    text_color: &Color,
-    accent: &Color,
-    track: &Color,
-    strings: Strings,
-    session_pct: f64,
-    session_text: &str,
-    weekly_pct: f64,
-    weekly_text: &str,
-    codex_session_pct: f64,
-    codex_session_text: &str,
-    codex_weekly_pct: f64,
-    codex_weekly_text: &str,
-    show_claude_code: bool,
-    show_codex: bool,
-    codex_accent: &Color,
+    hdc: HDC, width: i32, height: i32, is_dark: bool,
+    bg: &Color, text_color: &Color, accent: &Color, track: &Color, strings: Strings,
+    session_pct: f64, session_text: &str, weekly_pct: f64, weekly_text: &str,
+    codex_session_pct: f64, codex_session_text: &str, codex_weekly_pct: f64, codex_weekly_text: &str,
+    gemini_session_pct: f64, gemini_session_text: &str, gemini_weekly_pct: f64, gemini_weekly_text: &str,
+    antigravity_session_pct: f64, antigravity_session_text: &str, antigravity_weekly_pct: f64, antigravity_weekly_text: &str,
+    show_claude_code: bool, show_codex: bool, show_gemini: bool, show_antigravity: bool,
+    codex_accent: &Color, gemini_accent: &Color, antigravity_accent: &Color,
 ) {
     unsafe {
         let client_rect = RECT {
@@ -1407,38 +1457,18 @@ fn paint_content(
         let old_font = SelectObject(hdc, font);
 
         draw_row(
-            hdc,
-            content_x,
-            row1_y,
-            is_dark,
-            text_color,
-            strings.session_window,
-            session_pct,
-            session_text,
-            codex_session_pct,
-            codex_session_text,
-            show_claude_code,
-            show_codex,
-            accent,
-            codex_accent,
-            track,
+            hdc, content_x, row1_y, is_dark, text_color, strings.session_window,
+            session_pct, session_text, codex_session_pct, codex_session_text,
+            gemini_session_pct, gemini_session_text, antigravity_session_pct, antigravity_session_text,
+            show_claude_code, show_codex, show_gemini, show_antigravity,
+            accent, codex_accent, gemini_accent, antigravity_accent, track,
         );
         draw_row(
-            hdc,
-            content_x,
-            row2_y,
-            is_dark,
-            text_color,
-            strings.weekly_window,
-            weekly_pct,
-            weekly_text,
-            codex_weekly_pct,
-            codex_weekly_text,
-            show_claude_code,
-            show_codex,
-            accent,
-            codex_accent,
-            track,
+            hdc, content_x, row2_y, is_dark, text_color, strings.weekly_window,
+            weekly_pct, weekly_text, codex_weekly_pct, codex_weekly_text,
+            gemini_weekly_pct, gemini_weekly_text, antigravity_weekly_pct, antigravity_weekly_text,
+            show_claude_code, show_codex, show_gemini, show_antigravity,
+            accent, codex_accent, gemini_accent, antigravity_accent, track,
         );
 
         SelectObject(hdc, old_font);
@@ -1448,15 +1478,15 @@ fn paint_content(
 
 fn do_poll(send_hwnd: SendHwnd) {
     let hwnd = send_hwnd.to_hwnd();
-    let (show_claude_code, show_codex) = {
+    let (show_claude_code, show_codex, show_gemini, show_antigravity) = {
         let state = lock_state();
         state
             .as_ref()
-            .map(|s| (s.show_claude_code, s.show_codex))
-            .unwrap_or((true, false))
+            .map(|s| (s.show_claude_code, s.show_codex, s.show_gemini, s.show_antigravity))
+            .unwrap_or((true, false, false, false))
     };
 
-    match poller::poll(show_claude_code, show_codex) {
+    match poller::poll(show_claude_code, show_codex, show_gemini, show_antigravity) {
         Ok(data) => {
             let mut state = lock_state();
             if let Some(s) = state.as_mut() {
@@ -1473,6 +1503,20 @@ fn do_poll(send_hwnd: SendHwnd) {
                 } else if s.show_codex {
                     s.codex_session_percent = 0.0;
                     s.codex_weekly_percent = 0.0;
+                }
+                if let Some(gemini) = data.gemini.as_ref() {
+                    s.gemini_session_percent = gemini.session.percentage;
+                    s.gemini_weekly_percent = gemini.weekly.percentage;
+                } else if s.show_gemini {
+                    s.gemini_session_percent = 0.0;
+                    s.gemini_weekly_percent = 0.0;
+                }
+                if let Some(antigravity) = data.antigravity.as_ref() {
+                    s.antigravity_session_percent = antigravity.session.percentage;
+                    s.antigravity_weekly_percent = antigravity.weekly.percentage;
+                } else if s.show_antigravity {
+                    s.antigravity_session_percent = 0.0;
+                    s.antigravity_weekly_percent = 0.0;
                 }
                 // Stop fast-poll if reset data is now fresh
                 if !poller::app_is_past_reset(&data) {
@@ -2218,19 +2262,35 @@ unsafe extern "system" fn wnd_proc(
                     // Reset the poll timer with the new interval
                     SetTimer(hwnd, TIMER_POLL, new_interval, None);
                 }
-                IDM_MODEL_CLAUDE_CODE | IDM_MODEL_CODEX => {
+                IDM_MODEL_CLAUDE_CODE | IDM_MODEL_CODEX | IDM_MODEL_GEMINI | IDM_MODEL_ANTIGRAVITY => {
                     {
                         let mut state = lock_state();
                         if let Some(s) = state.as_mut() {
+                            let others_on = |skip: &str| -> bool {
+                                (skip != "claude" && s.show_claude_code)
+                                    || (skip != "codex" && s.show_codex)
+                                    || (skip != "gemini" && s.show_gemini)
+                                    || (skip != "antigravity" && s.show_antigravity)
+                            };
                             match id {
                                 IDM_MODEL_CLAUDE_CODE => {
-                                    if s.show_codex || !s.show_claude_code {
+                                    if others_on("claude") || !s.show_claude_code {
                                         s.show_claude_code = !s.show_claude_code;
                                     }
                                 }
                                 IDM_MODEL_CODEX => {
-                                    if s.show_claude_code || !s.show_codex {
+                                    if others_on("codex") || !s.show_codex {
                                         s.show_codex = !s.show_codex;
+                                    }
+                                }
+                                IDM_MODEL_GEMINI => {
+                                    if others_on("gemini") || !s.show_gemini {
+                                        s.show_gemini = !s.show_gemini;
+                                    }
+                                }
+                                IDM_MODEL_ANTIGRAVITY => {
+                                    if others_on("antigravity") || !s.show_antigravity {
+                                        s.show_antigravity = !s.show_antigravity;
                                     }
                                 }
                                 _ => {}
@@ -2239,6 +2299,10 @@ unsafe extern "system" fn wnd_proc(
                             s.weekly_text = "...".to_string();
                             s.codex_session_text = "...".to_string();
                             s.codex_weekly_text = "...".to_string();
+                            s.gemini_session_text = "...".to_string();
+                            s.gemini_weekly_text = "...".to_string();
+                            s.antigravity_session_text = "...".to_string();
+                            s.antigravity_weekly_text = "...".to_string();
                         }
                     }
                     save_state_settings();
@@ -2318,39 +2382,20 @@ unsafe extern "system" fn wnd_proc(
 fn show_context_menu(hwnd: HWND) {
     unsafe {
         let (
-            current_interval,
-            strings,
-            language,
-            language_override,
-            install_channel,
-            update_status,
-            widget_visible,
-            show_claude_code,
-            show_codex,
+            current_interval, strings, language, language_override, install_channel,
+            update_status, widget_visible, show_claude_code, show_codex, show_gemini, show_antigravity,
         ) = {
             let state = lock_state();
             match state.as_ref() {
                 Some(s) => (
-                    s.poll_interval_ms,
-                    s.language.strings(),
-                    s.language,
-                    s.language_override,
-                    s.install_channel,
-                    s.update_status.clone(),
-                    s.widget_visible,
-                    s.show_claude_code,
-                    s.show_codex,
+                    s.poll_interval_ms, s.language.strings(), s.language, s.language_override,
+                    s.install_channel, s.update_status.clone(), s.widget_visible,
+                    s.show_claude_code, s.show_codex, s.show_gemini, s.show_antigravity,
                 ),
                 None => (
-                    POLL_15_MIN,
-                    LanguageId::English.strings(),
-                    LanguageId::English,
-                    None,
-                    InstallChannel::Portable,
-                    UpdateStatus::Idle,
-                    true,
-                    true,
-                    false,
+                    POLL_15_MIN, LanguageId::English.strings(), LanguageId::English,
+                    None, InstallChannel::Portable, UpdateStatus::Idle,
+                    true, true, false, false, false,
                 ),
             }
         };
@@ -2422,6 +2467,32 @@ fn show_context_menu(hwnd: HWND) {
             codex_flags,
             IDM_MODEL_CODEX as usize,
             PCWSTR::from_raw(codex_model.as_ptr()),
+        );
+
+        let gemini_model = native_interop::wide_str(strings.gemini_model);
+        let gemini_flags = if show_gemini {
+            MF_CHECKED
+        } else {
+            MENU_ITEM_FLAGS(0)
+        };
+        let _ = AppendMenuW(
+            models_menu,
+            gemini_flags,
+            IDM_MODEL_GEMINI as usize,
+            PCWSTR::from_raw(gemini_model.as_ptr()),
+        );
+
+        let antigravity_model = native_interop::wide_str(strings.antigravity_model);
+        let antigravity_flags = if show_antigravity {
+            MF_CHECKED
+        } else {
+            MENU_ITEM_FLAGS(0)
+        };
+        let _ = AppendMenuW(
+            models_menu,
+            antigravity_flags,
+            IDM_MODEL_ANTIGRAVITY as usize,
+            PCWSTR::from_raw(antigravity_model.as_ptr()),
         );
 
         let models_label = native_interop::wide_str(strings.models);
@@ -2565,34 +2636,26 @@ fn show_context_menu(hwnd: HWND) {
 /// Paint for non-embedded fallback (normal WM_PAINT path)
 fn paint(hdc: HDC, hwnd: HWND) {
     let (
-        is_dark,
-        strings,
-        session_pct,
-        session_text,
-        weekly_pct,
-        weekly_text,
-        codex_session_pct,
-        codex_session_text,
-        codex_weekly_pct,
-        codex_weekly_text,
-        show_claude_code,
-        show_codex,
+        is_dark, strings,
+        session_pct, session_text, weekly_pct, weekly_text,
+        codex_session_pct, codex_session_text, codex_weekly_pct, codex_weekly_text,
+        gemini_session_pct, gemini_session_text, gemini_weekly_pct, gemini_weekly_text,
+        antigravity_session_pct, antigravity_session_text, antigravity_weekly_pct, antigravity_weekly_text,
+        show_claude_code, show_codex, show_gemini, show_antigravity,
     ) = {
         let state = lock_state();
         match state.as_ref() {
             Some(s) => (
-                s.is_dark,
-                s.language.strings(),
-                s.session_percent,
-                s.session_text.clone(),
-                s.weekly_percent,
-                s.weekly_text.clone(),
-                s.codex_session_percent,
-                s.codex_session_text.clone(),
-                s.codex_weekly_percent,
-                s.codex_weekly_text.clone(),
-                s.show_claude_code,
-                s.show_codex,
+                s.is_dark, s.language.strings(),
+                s.session_percent, s.session_text.clone(),
+                s.weekly_percent, s.weekly_text.clone(),
+                s.codex_session_percent, s.codex_session_text.clone(),
+                s.codex_weekly_percent, s.codex_weekly_text.clone(),
+                s.gemini_session_percent, s.gemini_session_text.clone(),
+                s.gemini_weekly_percent, s.gemini_weekly_text.clone(),
+                s.antigravity_session_percent, s.antigravity_session_text.clone(),
+                s.antigravity_weekly_percent, s.antigravity_weekly_text.clone(),
+                s.show_claude_code, s.show_codex, s.show_gemini, s.show_antigravity,
             ),
             None => return,
         }
@@ -2600,6 +2663,8 @@ fn paint(hdc: HDC, hwnd: HWND) {
 
     let accent = claude_accent_color();
     let codex_accent = codex_accent_color(is_dark);
+    let gemini_accent = Color::from_hex("#4285F4");
+    let antigravity_accent = Color::from_hex("#A855F7");
     let track = if is_dark {
         Color::from_hex("#444444")
     } else {
@@ -2631,26 +2696,14 @@ fn paint(hdc: HDC, hwnd: HWND) {
         let old_bmp = SelectObject(mem_dc, mem_bmp);
 
         paint_content(
-            mem_dc,
-            width,
-            height,
-            is_dark,
-            &bg_color,
-            &text_color,
-            &accent,
-            &track,
-            strings,
-            session_pct,
-            &session_text,
-            weekly_pct,
-            &weekly_text,
-            codex_session_pct,
-            &codex_session_text,
-            codex_weekly_pct,
-            &codex_weekly_text,
-            show_claude_code,
-            show_codex,
-            &codex_accent,
+            mem_dc, width, height, is_dark,
+            &bg_color, &text_color, &accent, &track, strings,
+            session_pct, &session_text, weekly_pct, &weekly_text,
+            codex_session_pct, &codex_session_text, codex_weekly_pct, &codex_weekly_text,
+            gemini_session_pct, &gemini_session_text, gemini_weekly_pct, &gemini_weekly_text,
+            antigravity_session_pct, &antigravity_session_text, antigravity_weekly_pct, &antigravity_weekly_text,
+            show_claude_code, show_codex, show_gemini, show_antigravity,
+            &codex_accent, &gemini_accent, &antigravity_accent,
         );
 
         let _ = BitBlt(hdc, 0, 0, width, height, mem_dc, 0, 0, SRCCOPY);
@@ -2672,16 +2725,24 @@ fn draw_row(
     claude_text: &str,
     codex_percent: f64,
     codex_text: &str,
+    gemini_percent: f64,
+    gemini_text: &str,
+    antigravity_percent: f64,
+    antigravity_text: &str,
     show_claude_code: bool,
     show_codex: bool,
+    show_gemini: bool,
+    show_antigravity: bool,
     claude_accent: &Color,
     codex_accent: &Color,
+    gemini_accent: &Color,
+    antigravity_accent: &Color,
     track: &Color,
 ) {
     let seg_h = sc(SEGMENT_H);
-    let active_models = active_model_count(show_claude_code, show_codex);
+    let active_models = active_model_count(show_claude_code, show_codex, show_gemini, show_antigravity);
     let segment_count = row_bar_segment_count(active_models);
-    let use_model_text_colors = show_claude_code && show_codex;
+    let use_model_text_colors = active_models > 1;
     let claude_value_color = if use_model_text_colors {
         claude_usage_text_color(is_dark)
     } else {
@@ -2689,6 +2750,16 @@ fn draw_row(
     };
     let codex_value_color = if use_model_text_colors {
         codex_usage_text_color(is_dark)
+    } else {
+        *text_color
+    };
+    let gemini_value_color = if use_model_text_colors {
+        Color::from_hex("#4285F4")
+    } else {
+        *text_color
+    };
+    let antigravity_value_color = if use_model_text_colors {
+        Color::from_hex("#A855F7")
     } else {
         *text_color
     };
@@ -2711,31 +2782,19 @@ fn draw_row(
 
         let mut model_x = x + sc(LABEL_WIDTH) + sc(LABEL_RIGHT_MARGIN);
         if show_claude_code {
-            draw_usage_bar(
-                hdc,
-                model_x,
-                y,
-                segment_count,
-                claude_percent,
-                claude_text,
-                claude_accent,
-                track,
-                &claude_value_color,
-            );
+            draw_usage_bar(hdc, model_x, y, segment_count, claude_percent, claude_text, claude_accent, track, &claude_value_color);
             model_x += model_usage_width(segment_count) + sc(MODEL_RIGHT_MARGIN);
         }
         if show_codex {
-            draw_usage_bar(
-                hdc,
-                model_x,
-                y,
-                segment_count,
-                codex_percent,
-                codex_text,
-                codex_accent,
-                track,
-                &codex_value_color,
-            );
+            draw_usage_bar(hdc, model_x, y, segment_count, codex_percent, codex_text, codex_accent, track, &codex_value_color);
+            model_x += model_usage_width(segment_count) + sc(MODEL_RIGHT_MARGIN);
+        }
+        if show_gemini {
+            draw_usage_bar(hdc, model_x, y, segment_count, gemini_percent, gemini_text, gemini_accent, track, &gemini_value_color);
+            model_x += model_usage_width(segment_count) + sc(MODEL_RIGHT_MARGIN);
+        }
+        if show_antigravity {
+            draw_usage_bar(hdc, model_x, y, segment_count, antigravity_percent, antigravity_text, antigravity_accent, track, &antigravity_value_color);
         }
     }
 }
